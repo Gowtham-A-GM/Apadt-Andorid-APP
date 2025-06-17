@@ -1,19 +1,65 @@
-<?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/main"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    tools:context=".MainActivity">
+    android:layout_height="match_parent">
 
+    <!-- Background Video -->
+    <VideoView
+        android:id="@+id/backgroundVideo"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentEnd="true" />
+
+    <!-- Menu Button (top right) -->
+<!--    <Button-->
+<!--        android:id="@+id/listViewButton"-->
+<!--        android:layout_width="wrap_content"-->
+<!--        android:layout_height="wrap_content"-->
+<!--        android:layout_alignParentTop="true"-->
+<!--        android:layout_alignParentEnd="true"-->
+<!--        android:layout_margin="16dp"-->
+<!--        android:padding="12dp"-->
+<!--        android:text="Menu"-->
+<!--        android:textColor="@color/black"-->
+<!--        android:textSize="16sp" />-->
+
+    <!-- Response TextView -->
     <TextView
+        android:id="@+id/responseTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Hello World!"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        android:layout_above="@id/startListeningButton"
+        android:layout_centerHorizontal="true"
+        android:layout_marginBottom="12dp"
+        android:text="Response here"
+        android:textColor="@color/white"
+        android:textSize="16sp"
+        android:textStyle="bold" />
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+    <!-- Start Listening Button -->
+    <Button
+        android:id="@+id/startListeningButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_centerHorizontal="true"
+        android:layout_marginBottom="16dp"
+        android:text="Touch me to speak" />
+
+    <!-- Language Spinner (bottom right corner) -->
+    <Spinner
+        android:id="@+id/languageSpinner"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentEnd="true"
+        android:layout_margin="16dp"
+        android:background="@drawable/spinner_bg"
+        android:paddingRight="2dp"
+        android:paddingLeft="2dp"
+        android:textAlignment="center"/>
+
+</RelativeLayout>
