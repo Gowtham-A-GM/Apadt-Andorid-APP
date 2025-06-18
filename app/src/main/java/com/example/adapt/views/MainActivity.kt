@@ -20,7 +20,10 @@ import com.example.adapt.R
 import com.example.adapt.databinding.ActivityMainBinding
 import com.example.adapt.db.ChatModel
 import com.example.adapt.viewModel.ChatViewModel
+import com.example.adapt.viewModel.TamilTransliterator
+import com.google.mlkit.common.model.DownloadConditions
 import kotlinx.coroutines.launch
+import com.google.mlkit.nl.translate.*
 
 class MainActivity : AppCompatActivity() {
 
@@ -49,7 +52,6 @@ class MainActivity : AppCompatActivity() {
         setUpSpinner()
         initTTS()
         setupSpeechToText()
-
     }
 
     private fun playBGVideo(resourceId: Int) {
@@ -116,7 +118,6 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-
     private fun setupSpeechToText() {
         if (checkSelfPermission(permissionsArray[0]) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, permissionsArray, 200)
@@ -133,7 +134,6 @@ class MainActivity : AppCompatActivity() {
         binding.btnStartListening.setOnClickListener {
             if (!isListening) {
                 binding.btnStartListening.text = "Listening..."
-//                playBGVideo(R.raw.bg_listening)
                 speechRecognizer.startListening(speechRecognizerIntent)
                 isListening = true
             } else {
@@ -159,8 +159,21 @@ class MainActivity : AppCompatActivity() {
                 isListening = false
                 binding.btnStartListening.text = "Touch me to speak"
                 playBGVideo(R.raw.bg_ideal)
-                Log.d("ERR", "ERROR")
-                Toast.makeText(this@MainActivity, "Error recognizing speech", Toast.LENGTH_SHORT).show()
+                val errorMsg = when (error) {
+                    SpeechRecognizer.ERROR_AUDIO -> "Audio recording error"
+                    SpeechRecognizer.ERROR_CLIENT -> "Client side error"
+                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Mic permission denied"
+                    SpeechRecognizer.ERROR_NETWORK -> "Network error"
+                    SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout"
+                    SpeechRecognizer.ERROR_NO_MATCH -> "Didn't understand, try again"
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Recognizer busy, try again"
+                    SpeechRecognizer.ERROR_SERVER -> "Server error"
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech input"
+                    else -> "Unknown error"
+                }
+
+                Log.e("STT", "Error: $errorMsg")
+                Toast.makeText(this@MainActivity, "Error recognizing speech: $errorMsg", Toast.LENGTH_SHORT).show()
             }
 
             override fun onResults(results: Bundle?) {
@@ -197,13 +210,38 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
+    private fun translate(
+        text: String,
+        from: String,
+        to: String,
+        onResult: (String) -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        val options = TranslatorOptions.Builder()
+            .setSourceLanguage(from)
+            .setTargetLanguage(to)
+            .build()
+
+        val translator = Translation.getClient(options)
+        val conditions = DownloadConditions.Builder().build()
+
+        translator.downloadModelIfNeeded(conditions)
+            .addOnSuccessListener {
+                translator.translate(text)
+                    .addOnSuccessListener(onResult)
+                    .addOnFailureListener(onError)
+            }
+            .addOnFailureListener(onError)
+    }
+
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
         if (requestCode == 200 && grantResults.isNotEmpty()) {
             if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 Toast.makeText(this, "Mic permission granted", Toast.LENGTH_SHORT).show()
-                setupSpeechToText() // ← Retry initialization now
+                setupSpeechToText()
             } else {
                 Toast.makeText(this, "Microphone permission is required", Toast.LENGTH_SHORT).show()
             }
