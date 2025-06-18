@@ -1,48 +1,50 @@
-package com.example.adapt.viewModel
-
-import android.util.Log
 import com.google.ai.client.generativeai.GenerativeModel
-import com.google.ai.client.generativeai.type.GenerateContentResponse
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.google.ai.client.generativeai.type.content
 
-class GeminiHandler {
+object GeminiHandler {
 
     private val generativeModel = GenerativeModel(
-        modelName = "gemini-2.0-flash",
-        apiKey = "AIzaSyAvGgefaf8qo59mK_s7cDKvobS_1cSpKgY" // Replace with your actual Gemini API key
+        modelName = "gemini-1.5-flash",
+        apiKey = "AIzaSyAvGgefaf8qo59mK_s7cDKvobS_1cSpKgY"
     )
 
-    suspend fun getResponse(input: String, language: String): String = withContext(Dispatchers.IO) {
-        try {
-            val prompt = when (language) {
-                "ta-IN" -> """
-                    நான் டி-போட், உங்கள் நண்பர். அடாப்ட் ரோபோடிக்ஸால் உருவாக்கப்பட்டேன்.
-                    இந்த கேள்விக்கு ஒரு நெருக்கமான நண்பர் போல் உரையாடும் முறையில் பதிலளிக்கவும்: $input
-                    பதில் சுருக்கமாகவும், உரையாடல் போன்றும் இருக்க வேண்டும். வார்த்தைகளை அதிகம் பயன்படுத்த வேண்டாம். எமோஜிகளைப் பயன்படுத்த வேண்டாம்.
-                """.trimIndent()
+    suspend fun initGeminiAI(language: String): String {
+        val chat = generativeModel.startChat()
+        val greeting = if (language == "ta-IN") {
+            "நான் டி-போட், உங்கள் நண்பர். அடாப்ட் ரோபோடிக்ஸ் நிறுவனம் உருவாக்கியது. என்னை பற்றி கேட்டதற்கு நன்றி!"
+        } else {
+            "I am tBot, your friendly assistant created by Adapt Robotics. Thanks for asking about me!"
+        }
+        val response = chat.sendMessage(greeting)
+        return response.text?.trim() ?: fallback(language)
+    }
 
-                else -> """
-                    I am tBot, your friendly assistant from Adapt Robotics.
-                    Respond to this question in a warm, conversational tone: $input
-                    Keep it short, human-like, and avoid emojis. Answer in about 3 sentences max.
-                """.trimIndent()
+    suspend fun sendMessage(prompt: String, language: String, history: List<Pair<String, String>>): String {
+        return try {
+            val historyContent = history.map {
+                content(it.first) { text(it.second) }
             }
 
-            val response: GenerateContentResponse = generativeModel.generateContent(prompt)
-            return@withContext response.text?.trim() ?: fallback(language)
+            val chat = generativeModel.startChat(history = historyContent)
+
+            val modifiedPrompt = if (language == "ta-IN") {
+                    "இந்த கேள்விக்கு சுருக்கமாக, நண்பருக்கே பதிலளிப்பது போல, எமோஜி இல்லாமல் தமிழில் பதில்:\n$prompt"
+                } else {
+                    "Answer this in a short, friendly, and natural way—no emojis please.:\n$prompt"
+                }
+
+
+            val response = chat.sendMessage(modifiedPrompt)
+            response.text?.trim() ?: fallback(language)
 
         } catch (e: Exception) {
-            Log.e("GeminiHandler", "Error generating response: ${e.message}", e)
-            return@withContext fallback(language)
+            e.printStackTrace()
+            fallback(language)
         }
     }
 
     private fun fallback(language: String): String {
-        return if (language == "ta-IN") {
-            "மன்னிக்கவும், பதிலை உருவாக்க முடியவில்லை."
-        } else {
-            "Sorry, I couldn't generate a response."
-        }
+        return if (language == "ta-IN") "மன்னிக்கவும், பதிலை உருவாக்க முடியவில்லை."
+        else "Sorry, I couldn't generate a response."
     }
 }

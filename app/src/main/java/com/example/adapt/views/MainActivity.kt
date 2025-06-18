@@ -1,171 +1,228 @@
 package com.example.adapt.views
 
-import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.view.View
-import android.widget.TextView
-import android.widget.Button
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Toast
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import com.example.adapt.R
 import com.example.adapt.databinding.ActivityMainBinding
-import com.example.adapt.viewModel.GeminiHandler
-import com.example.adapt.viewModel.SimpleSpeechListener
-import com.example.adapt.viewModel.TTSManager
-import com.example.adapt.viewModel.VideoSyncManager
-import kotlinx.coroutines.*
-import android.widget.AdapterView
-import java.util.*
+import com.example.adapt.db.ChatModel
+import com.example.adapt.viewModel.ChatViewModel
+import kotlinx.coroutines.launch
 
-class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
+class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private lateinit var responseTextView: TextView
-    private lateinit var startListeningButton: Button
+    private val chatViewModel: ChatViewModel by viewModels()
+
+    private val permissionsArray = arrayOf(android.Manifest.permission.RECORD_AUDIO)
     private lateinit var speechRecognizer: SpeechRecognizer
-    private lateinit var textToSpeech: TextToSpeech
-
-    private lateinit var geminiHandler: GeminiHandler
-    private lateinit var ttsManager: TTSManager
-    private lateinit var videoSyncManager: VideoSyncManager
-
+    private lateinit var speechRecognizerIntent: Intent
+    private var selectedLanguageCode = "en-US"
+    private var isListening = false
     private var isSpeaking = false
-    private var isButtonTriggeredListening = false
-    private var currentLanguage = "en-US"
-
-    private val scope = CoroutineScope(Dispatchers.Main + Job())
-
-    companion object {
-        private const val TAG = "MainActivity"
-        private const val PERMISSION_REQUEST_CODE = 1
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        responseTextView = binding.responseTextView
-        startListeningButton = binding.startListeningButton
+        binding.btnSaveChat.setOnClickListener {
+            val intent = Intent(this, CustomQueryActivity::class.java)
+            startActivity(intent)
+        }
 
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
-        textToSpeech = TextToSpeech(this, this)
+        initGemini()
+        playBGVideo(R.raw.bg_ideal)
+        setUpSpinner()
+        initTTS()
+        setupSpeechToText()
 
-        geminiHandler = GeminiHandler()
-        ttsManager = TTSManager(this, textToSpeech, ::onTTSStart, ::onTTSEnd)
-        videoSyncManager = VideoSyncManager(this, binding.backgroundVideo)
-
-        setupPermissions()
-        setupListeners()
-        setupLanguageSelector()
-        setupInitialVideo()
     }
 
-    private fun setupListeners() {
-        startListeningButton.setOnClickListener {
-            if (!isButtonTriggeredListening) {
-                startVoiceInput()
-            }
+    private fun playBGVideo(resourceId: Int) {
+        val videoUri = Uri.parse("android.resource://$packageName/$resourceId")
+        binding.backgroundVideo.setVideoURI(videoUri)
+        binding.backgroundVideo.setOnPreparedListener {
+            it.isLooping = true
+            it.setVolume(0f, 0f)
+            binding.backgroundVideo.start()
         }
     }
 
-    private fun setupPermissions() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), PERMISSION_REQUEST_CODE)
-        }
-    }
-
-    private fun setupLanguageSelector() {
+    private fun setUpSpinner() {
+        val languages = listOf("English", "தமிழ்")
+        val adapter = ArrayAdapter(this, R.layout.spinner_item, languages)
+        adapter.setDropDownViewResource(R.layout.spinner_dropdown_item)
+        binding.languageSpinner.adapter = adapter
         binding.languageSpinner.setSelection(0)
 
-        binding.languageSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(
-                parent: AdapterView<*>,
-                view: View?,
-                position: Int,
-                id: Long
-            ) {
-                currentLanguage = if (position == 0) "en-US" else "ta-IN"
-                ttsManager.updateLanguage(currentLanguage)
-            }
+        binding.languageSpinner.onItemSelectedListener =
+            object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
+                    selectedLanguageCode = if (position == 0) "en-US" else "ta-IN"
+                    chatViewModel.updateLanguage(selectedLanguageCode)
 
-            override fun onNothingSelected(parent: AdapterView<*>) {
-                // Optional: handle case if nothing selected
+                    if (!ChatViewModel.hasIntroInitialized) {
+                        initGemini()
+                    }
+
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Language: ${parent.getItemAtPosition(position)}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+
+                override fun onNothingSelected(parent: AdapterView<*>) {}
             }
+    }
+
+    private fun initGemini() {
+        lifecycleScope.launch {
+            chatViewModel.initGeminiAI(selectedLanguageCode)
+            ChatViewModel.hasIntroInitialized = true
         }
     }
 
-    private fun setupInitialVideo() {
-        videoSyncManager.setIdleVideo("android.resource://$packageName/raw/bg_ideal")
-        videoSyncManager.setSpeakVideo("android.resource://$packageName/raw/bg_speaking")
-        videoSyncManager.playIdle()
+    private fun initTTS() {
+        chatViewModel.initTTS(
+            context = this,
+            onStart = {
+                isSpeaking = true
+                runOnUiThread {
+                    playBGVideo(R.raw.bg_speaking)
+                }
+            },
+            onDone = {
+                isSpeaking = false
+                runOnUiThread {
+                    playBGVideo(R.raw.bg_ideal)
+                    binding.responseTextView.text = ""
+                }
+            }
+        )
     }
 
-    private fun startVoiceInput() {
-        if (isSpeaking) textToSpeech.stop()
-        isButtonTriggeredListening = true
-        startListeningButton.text = "Listening..."
-        responseTextView.text = ""
 
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+    private fun setupSpeechToText() {
+        if (checkSelfPermission(permissionsArray[0]) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, permissionsArray, 200)
+        }
+
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+        speechRecognizerIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, currentLanguage)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, selectedLanguageCode)
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak something...")
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
         }
 
-        speechRecognizer.setRecognitionListener(object : SimpleSpeechListener() {
-            override fun onResults(results: Bundle?) {
-                val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-                text?.let { processInput(it) }
-                resetListeningButton()
+        binding.btnStartListening.setOnClickListener {
+            if (!isListening) {
+                binding.btnStartListening.text = "Listening..."
+//                playBGVideo(R.raw.bg_listening)
+                speechRecognizer.startListening(speechRecognizerIntent)
+                isListening = true
+            } else {
+                binding.btnStartListening.text = "Touch me to speak"
+                playBGVideo(R.raw.bg_ideal)
+                speechRecognizer.stopListening()
+                isListening = false
             }
+        }
+
+        speechRecognizer.setRecognitionListener(object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) {}
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {
+                isListening = false
+                binding.btnStartListening.text = "Touch me to speak"
+                playBGVideo(R.raw.bg_ideal)
+            }
+
             override fun onError(error: Int) {
-                Toast.makeText(this@MainActivity, "Please speak clearly.", Toast.LENGTH_SHORT).show()
-                resetListeningButton()
+                isListening = false
+                binding.btnStartListening.text = "Touch me to speak"
+                playBGVideo(R.raw.bg_ideal)
+                Log.d("ERR", "ERROR")
+                Toast.makeText(this@MainActivity, "Error recognizing speech", Toast.LENGTH_SHORT).show()
             }
+
+            override fun onResults(results: Bundle?) {
+                val speechToTextResult = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                if (!speechToTextResult.isNullOrEmpty()) {
+                    val question = speechToTextResult[0]
+                    Log.d("MainActivity", "STT Result: $question")
+
+                    binding.responseTextView.text = if (selectedLanguageCode == "ta-IN") "பதில் தயாராகிறது..." else "Processing..."
+
+//                    val chatModel = ChatModel(message = question, isUser = true)
+//                    chatViewModel.create(chatModel)
+
+                    lifecycleScope.launch {
+                        // Check for saved response first
+                        val savedResponse = chatViewModel.getResponseForKeyword(question.lowercase().trim())
+                        Log.d("MainActivity", "Saved Response: $savedResponse")
+
+                        if (savedResponse != null) {
+                            binding.responseTextView.text = savedResponse
+                            chatViewModel.speakOut(savedResponse, selectedLanguageCode)
+                        } else {
+                            // No saved response, fallback to Gemini
+                            val reply = chatViewModel.sendMessageToGeminiAI(question, selectedLanguageCode)
+                            binding.responseTextView.text = reply
+                            chatViewModel.speakOut(reply, selectedLanguageCode)
+                        }
+                    }
+                }
+            }
+
+            override fun onPartialResults(partialResults: Bundle?) {}
+            override fun onEvent(eventType: Int, params: Bundle?) {}
         })
-
-        speechRecognizer.startListening(intent)
     }
 
-    private fun resetListeningButton() {
-        isButtonTriggeredListening = false
-        startListeningButton.text = "Start Speaking"
-    }
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
-    private fun processInput(input: String) {
-        scope.launch {
-            responseTextView.text = if (currentLanguage == "ta-IN") "பதில் தயாராகிறது..." else "Processing..."
-            val reply = geminiHandler.getResponse(input, currentLanguage)
-            responseTextView.text = reply
-            ttsManager.speak(reply, currentLanguage)
+        if (requestCode == 200 && grantResults.isNotEmpty()) {
+            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "Mic permission granted", Toast.LENGTH_SHORT).show()
+                setupSpeechToText() // ← Retry initialization now
+            } else {
+                Toast.makeText(this, "Microphone permission is required", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
-    private fun onTTSStart() {
-        isSpeaking = true
-        videoSyncManager.playSpeaking()
+    override fun onResume() {
+        super.onResume()
+        binding.backgroundVideo.start()
     }
 
-    private fun onTTSEnd() {
-        isSpeaking = false
-        videoSyncManager.playIdle()
-    }
-
-    override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) ttsManager.updateLanguage(currentLanguage)
+    override fun onPause() {
+        super.onPause()
+        binding.backgroundVideo.pause()
     }
 
     override fun onDestroy() {
         speechRecognizer.destroy()
-        textToSpeech.shutdown()
+        chatViewModel.shutdownTTS()
         super.onDestroy()
     }
 }

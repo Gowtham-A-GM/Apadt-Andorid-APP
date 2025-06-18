@@ -8,40 +8,54 @@
         android:id="@+id/backgroundVideo"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_alignParentTop="true"
         android:layout_alignParentStart="true"
-        android:layout_alignParentBottom="true"
-        android:layout_alignParentEnd="true" />
+        android:layout_alignParentTop="true"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentBottom="true" />
 
     <!-- Menu Button (top right) -->
-<!--    <Button-->
-<!--        android:id="@+id/listViewButton"-->
-<!--        android:layout_width="wrap_content"-->
-<!--        android:layout_height="wrap_content"-->
-<!--        android:layout_alignParentTop="true"-->
-<!--        android:layout_alignParentEnd="true"-->
-<!--        android:layout_margin="16dp"-->
-<!--        android:padding="12dp"-->
-<!--        android:text="Menu"-->
-<!--        android:textColor="@color/black"-->
-<!--        android:textSize="16sp" />-->
+    <!--    <Button-->
+    <!--        android:id="@+id/listViewButton"-->
+    <!--        android:layout_width="wrap_content"-->
+    <!--        android:layout_height="wrap_content"-->
+    <!--        android:layout_alignParentTop="true"-->
+    <!--        android:layout_alignParentEnd="true"-->
+    <!--        android:layout_margin="16dp"-->
+    <!--        android:padding="12dp"-->
+    <!--        android:text="Menu"-->
+    <!--        android:textColor="@color/black"-->
+    <!--        android:textSize="16sp" />-->
+
+    <Button
+        android:id="@+id/btnSaveChat"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end"
+        android:layout_margin="16dp"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentRight="true"
+        android:background="@drawable/main_custom_round_btn"
+        android:text="+"
+        android:textColor="#1E1E1E"
+        android:textSize="24dp" />
+
 
     <!-- Response TextView -->
     <TextView
         android:id="@+id/responseTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_above="@id/startListeningButton"
+        android:layout_above="@id/btn_startListening"
         android:layout_centerHorizontal="true"
         android:layout_marginBottom="12dp"
-        android:text="Response here"
+        android:text=""
         android:textColor="@color/white"
         android:textSize="16sp"
         android:textStyle="bold" />
 
     <!-- Start Listening Button -->
     <Button
-        android:id="@+id/startListeningButton"
+        android:id="@+id/btn_startListening"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
@@ -54,12 +68,12 @@
         android:id="@+id/languageSpinner"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
         android:layout_alignParentEnd="true"
+        android:layout_alignParentBottom="true"
         android:layout_margin="16dp"
         android:background="@drawable/spinner_bg"
-        android:paddingRight="2dp"
         android:paddingLeft="2dp"
-        android:textAlignment="center"/>
+        android:paddingRight="2dp"
+        android:textAlignment="center" />
 
 </RelativeLayout>

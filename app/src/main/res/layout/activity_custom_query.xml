@@ -1,0 +1,120 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#121212"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="start|center_vertical"
+        android:paddingBottom="8dp">
+
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="6dp"
+            android:src="@drawable/ic_arrow_back_white"
+            android:contentDescription="Back"
+            android:tint="#FFFFFF" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Back"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:paddingStart="4dp" />
+    </LinearLayout>
+
+
+    <TextView
+        android:id="@+id/tvTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Custom Query Management"
+        android:textColor="#FFFFFF"
+        android:textStyle="bold"
+        android:textSize="20sp"
+        android:gravity="center"
+        android:paddingBottom="8dp" />
+
+    <TextView
+        android:id="@+id/tvSubtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Add custom queries and responses. The bot will respond when users ask using the keyword."
+        android:textColor="#CCCCCC"
+        android:textSize="14sp"
+        android:gravity="center"
+        android:paddingBottom="12dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:background="@drawable/bg_rounded_card"
+        android:elevation="4dp">
+
+        <EditText
+            android:id="@+id/etKeyword"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Query keyword (e.g., 'weather', 'home')"
+            android:background="@drawable/bg_edittext"
+            android:padding="10dp"
+            android:textColor="#000000"
+            android:textColorHint="#888888"
+            android:textSize="16sp" />
+
+        <EditText
+            android:id="@+id/etResponse"
+            android:layout_width="match_parent"
+            android:layout_height="100dp"
+            android:hint="Response to this query"
+            android:background="@drawable/bg_edittext"
+            android:padding="10dp"
+            android:textColor="#000000"
+            android:textColorHint="#888888"
+            android:textSize="16sp"
+            android:gravity="top|start"
+            android:inputType="textMultiLine"
+            android:maxLines="5"
+            android:layout_marginTop="8dp" />
+
+        <Button
+            android:id="@+id/btnAddQuery"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Add Query"
+            android:layout_gravity="center"
+            android:backgroundTint="#C7A9FF"
+            android:textStyle="bold"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_btn_rounded" />
+    </LinearLayout>
+
+
+    <TextView
+        android:id="@+id/tvExisting"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Existing Custom Queries"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:layout_marginTop="16dp" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerQueries"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="8dp"
+        android:clipToPadding="false" />
+</LinearLayout>
