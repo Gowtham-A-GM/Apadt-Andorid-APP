@@ -2,9 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.INTERNET"/>
-    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />  <!-- Required for Android <= 32 -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />     <!-- Required for Android >= 33 -->
+    <uses-permission android:name="android.permission.DISABLE_KEYGUARD"/>
 
     <uses-feature
         android:name="android.hardware.camera"
@@ -23,10 +26,29 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Adapt"
         tools:targetApi="31">
+
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="face" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+
+
+        </provider>
+
         <activity
             android:name=".views.MainActivity"
             android:exported="true"
-            android:screenOrientation="landscape">
+            android:lockTaskMode="if_whitelisted"
+            android:screenOrientation="landscape"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -34,13 +56,28 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".views.CustomQueryActivity"/>
+        <activity
+            android:name=".views.CustomQueryActivity"
+            android:windowSoftInputMode="adjustResize"/>
 
-        <service
-            android:name=".viewModel.BackgroundFaceService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="camera" />
+        <activity
+            android:name=".views.CustomFaceActivity"
+            android:windowSoftInputMode="adjustResize"/>
+
+        <receiver
+            android:name=".views.MyDeviceAdminReceiver"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:exported="true">
+
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin_receiver" />
+
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
 
     </application>
 

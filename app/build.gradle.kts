@@ -64,7 +64,16 @@ dependencies {
 
 
     // ML Kit Face Detection
-    implementation ("com.google.mlkit:face-detection:16.1.5")
+//    implementation ("com.google.mlkit:face-detection:16.1.5")
+    implementation ("com.google.android.gms:play-services-mlkit-face-detection:17.1.0")
+
+    // Tensor Flow
+    implementation ("org.tensorflow:tensorflow-lite:2.13.0")
+    implementation ("org.tensorflow:tensorflow-lite-support:0.4.2")
+    implementation ("org.tensorflow:tensorflow-lite-gpu:2.13.0")
+
+    implementation ("com.google.code.gson:gson:2.8.9")
+    implementation ("com.google.guava:guava:27.1-android")
 
     // CameraX
     implementation ("androidx.camera:camera-core:1.3.0")

@@ -26,6 +26,17 @@
     <!--        android:textColor="@color/black"-->
     <!--        android:textSize="16sp" />-->
 
+    <!-- Secret Exit Tap Zone (Top-Left Corner) -->
+    <View
+        android:id="@+id/exitTapZone"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentTop="true"
+        android:background="@android:color/transparent"
+        android:clickable="true"
+        android:focusable="true" />
+
     <Button
         android:id="@+id/btnSaveChat"
         android:layout_width="wrap_content"

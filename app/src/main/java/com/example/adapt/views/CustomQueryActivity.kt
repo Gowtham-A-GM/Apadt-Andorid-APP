@@ -1,5 +1,6 @@
 package com.example.adapt.views
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -41,6 +42,10 @@ class CustomQueryActivity : AppCompatActivity() {
 
         binding.btnBack.setOnClickListener {
             finish()
+        }
+
+        binding.btnCustomFace.setOnClickListener {
+            startActivity(Intent(this, CustomFaceActivity::class.java))
         }
 
         binding.btnAddQuery.setOnClickListener {

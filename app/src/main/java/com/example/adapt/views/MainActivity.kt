@@ -21,30 +21,57 @@ import androidx.core.app.ActivityCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.adapt.R
 import com.example.adapt.databinding.ActivityMainBinding
-import com.example.adapt.db.ChatModel
-import com.example.adapt.viewModel.BackgroundFaceService
 import com.example.adapt.viewModel.ChatViewModel
 import kotlinx.coroutines.launch
 //import transliterateToTamil
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.os.Build
+
+import kotlin.math.sqrt
+import androidx.camera.core.*
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.core.content.ContextCompat
+import com.example.adapt.db.ChatDatabase
+import com.example.adapt.viewModel.FaceEmbedder
+import com.example.adapt.viewModel.FaceViewModel
+import com.google.gson.Gson
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.face.FaceDetection
+import com.google.mlkit.vision.face.FaceDetectorOptions
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.util.concurrent.Executors
+
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private val chatViewModel: ChatViewModel by viewModels()
+    private val faceViewModel: FaceViewModel by viewModels()
 
+    private var tapCount = 0
+    private var lastTapTime = 0L
+
+    // PermissionsArray: READ_EXTERNAL_STORAGE is deprecated from Android 13 (API 33), Instead, use READ_MEDIA_IMAGES.
     private val permissionsArray = arrayOf(
         android.Manifest.permission.RECORD_AUDIO,
-        android.Manifest.permission.CAMERA
+        android.Manifest.permission.CAMERA,
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+            android.Manifest.permission.READ_MEDIA_IMAGES
+        else
+            android.Manifest.permission.READ_EXTERNAL_STORAGE
     )
+
     private lateinit var speechRecognizer: SpeechRecognizer
     private lateinit var speechRecognizerIntent: Intent
     private var selectedLanguageCode = "en-US"
     private var isListening = false
     private var isSpeaking = false
 
-    private var faceServiceBound = false
-    private var backgroundFaceService: BackgroundFaceService? = null
+    private val faceExecutor = Executors.newSingleThreadExecutor()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,12 +83,65 @@ class MainActivity : AppCompatActivity() {
             startActivity(intent)
         }
 
+//        hideSystemUI()
+        lockSystemUI()
+        setupSecretExitTap()
         initGemini()
         playBGVideo(R.raw.bg_ideal)
         setUpSpinner()
         initTTS()
         setupSpeechToText()
+        startFaceRecognition()
     }
+
+//    Uncomment this and comment lockSystemUI to hide the System top UI (by default),but on swipping above it will show
+//    private fun hideSystemUI() {
+//        window.decorView.systemUiVisibility = (
+//                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+//                        or View.SYSTEM_UI_FLAG_FULLSCREEN
+//                        or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+//                        or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+//                        or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+//                        or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+//                )
+//    }
+
+    private fun lockSystemUI(){
+        val devicePolicyManager = getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val componentName = ComponentName(this, MyDeviceAdminReceiver::class.java)
+
+        // If already a device owner or admin:
+        if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
+            devicePolicyManager.setLockTaskPackages(componentName, arrayOf(packageName))
+            startLockTask()
+        } else {
+            // Fallback: allow lock task anyway (if app is manually whitelisted)
+            startLockTask()
+        }
+    }
+
+    private fun setupSecretExitTap() {
+        val tapZone = findViewById<View>(R.id.exitTapZone)
+        tapZone.setOnClickListener {
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastTapTime < 800) {
+                tapCount++
+            } else {
+                tapCount = 1
+            }
+            lastTapTime = currentTime
+
+            if (tapCount >= 5) {
+                tapCount = 0
+                stopLockTask()
+                finish() // Optional: or navigate to another screen
+                Toast.makeText(this, "Exiting lock mode", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+
 
     private fun playBGVideo(resourceId: Int) {
         val videoUri = Uri.parse("android.resource://$packageName/$resourceId")
@@ -82,7 +162,12 @@ class MainActivity : AppCompatActivity() {
 
         binding.languageSpinner.onItemSelectedListener =
             object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
+                override fun onItemSelected(
+                    parent: AdapterView<*>,
+                    view: View?,
+                    position: Int,
+                    id: Long
+                ) {
                     selectedLanguageCode = if (position == 0) "en-US" else "ta-IN"
                     chatViewModel.updateLanguage(selectedLanguageCode)
 
@@ -134,7 +219,10 @@ class MainActivity : AppCompatActivity() {
 
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
         speechRecognizerIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(
+                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+            )
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, selectedLanguageCode)
             putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak something...")
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
@@ -182,16 +270,22 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 Log.e("STT", "Error: $errorMsg")
-                Toast.makeText(this@MainActivity, "Error recognizing speech: $errorMsg", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this@MainActivity,
+                    "Error recognizing speech: $errorMsg",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
 
             override fun onResults(results: Bundle?) {
-                val speechToTextResult = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                val speechToTextResult =
+                    results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 if (!speechToTextResult.isNullOrEmpty()) {
                     val phoneticInput = speechToTextResult[0].lowercase().trim()
                     Log.d("MainActivity", "STT Raw: $phoneticInput")
 
-                    binding.responseTextView.text = if (selectedLanguageCode == "ta-IN") "பதில் தயாராகிறது..." else "Processing..."
+                    binding.responseTextView.text =
+                        if (selectedLanguageCode == "ta-IN") "பதில் தயாராகிறது..." else "Processing..."
 
                     lifecycleScope.launch {
                         // Transliterate Tamil if detected or selected
@@ -200,10 +294,14 @@ class MainActivity : AppCompatActivity() {
                         val englishKeyword = phoneticInput
 
                         // Try both Tamil and English keywords
-                        val savedResponse = chatViewModel.getResponseForKeyword(tamilKeyword ?: englishKeyword)
-                            ?: chatViewModel.getResponseForKeyword(englishKeyword)
+                        val savedResponse =
+                            chatViewModel.getResponseForKeyword(tamilKeyword ?: englishKeyword)
+                                ?: chatViewModel.getResponseForKeyword(englishKeyword)
 
-                        Log.d("MainActivity", "tamilKeyword: $tamilKeyword, englishKeyword: $englishKeyword, savedResponse: $savedResponse")
+                        Log.d(
+                            "MainActivity",
+                            "tamilKeyword: $tamilKeyword, englishKeyword: $englishKeyword, savedResponse: $savedResponse"
+                        )
 
                         if (savedResponse != null) {
                             Log.d("MainActivity", "Found Saved Response")
@@ -211,7 +309,10 @@ class MainActivity : AppCompatActivity() {
                             chatViewModel.speakOut(savedResponse, selectedLanguageCode)
                         } else {
                             Log.d("MainActivity", "No Saved Response. Using Gemini.")
-                            val reply = chatViewModel.sendMessageToGeminiAI(englishKeyword, selectedLanguageCode)
+                            val reply = chatViewModel.sendMessageToGeminiAI(
+                                englishKeyword,
+                                selectedLanguageCode
+                            )
                             binding.responseTextView.text = reply
                             chatViewModel.speakOut(reply, selectedLanguageCode)
                         }
@@ -225,70 +326,66 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
         if (requestCode == 200 && grantResults.isNotEmpty()) {
-            val allGranted = grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+            val deniedPermissions = permissions.zip(grantResults.toTypedArray())
+                .filter { it.second != PackageManager.PERMISSION_GRANTED }
+                .map { it.first }
 
-            if (allGranted) {
+            if (deniedPermissions.isEmpty()) {
                 Toast.makeText(this, "All permissions granted", Toast.LENGTH_SHORT).show()
                 setupSpeechToText()
             } else {
-                Toast.makeText(this, "Microphone and Camera permissions are required", Toast.LENGTH_LONG).show()
+                val deniedMsg = when {
+                    deniedPermissions.contains(android.Manifest.permission.RECORD_AUDIO) ||
+                            deniedPermissions.contains(android.Manifest.permission.CAMERA) ->
+                        "Microphone and Camera permissions are required."
+
+                    deniedPermissions.contains(android.Manifest.permission.READ_EXTERNAL_STORAGE) ||
+                            deniedPermissions.contains(android.Manifest.permission.READ_MEDIA_IMAGES) ->
+                        "Gallery permission is required to pick an image."
+
+                    else -> "Some permissions were denied."
+                }
+
+                Toast.makeText(this, deniedMsg, Toast.LENGTH_LONG).show()
             }
         }
     }
 
-    private val faceServiceConnection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            val binder = service as BackgroundFaceService.LocalBinder
-            backgroundFaceService = binder.getService()
-            faceServiceBound = true
+    @androidx.annotation.OptIn(ExperimentalGetImage::class)
+    private fun startFaceRecognition() {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+        cameraProviderFuture.addListener({
+            val cameraProvider = cameraProviderFuture.get()
+            faceViewModel.reloadRegisteredFaces()
+            faceViewModel.startFaceRecognition(
+                cameraProvider = cameraProvider,
+                executor = faceExecutor,
+                lifecycleOwner = this
+            )
+        }, ContextCompat.getMainExecutor(this))
 
-            backgroundFaceService?.setCallback(object : BackgroundFaceService.FaceRecognitionCallback {
-                override fun onFirstFaceDetected() {
-                    runOnUiThread {
-                        val greeting = if (selectedLanguageCode == "ta-IN") {
-                            "வணக்கம்! அடாப்ட் ரோபாட்டிக்ஸ் சார்பாக எங்கள் T-Bot உங்களை அன்புடன் வரவேற்கிறது."
-                        } else {
-                            "Welcome to Adapt Robotics! I'm T-Bot, it's a pleasure to meet you and assist you today."
-                        }
-                        binding.responseTextView.text = greeting
-
-//                        Toast.makeText(this@MainActivity, greeting, Toast.LENGTH_LONG).show()
-                        chatViewModel.speakOut(greeting, selectedLanguageCode)
-                    }
-                }
-
-            })
-        }
-
-        override fun onServiceDisconnected(name: ComponentName?) {
-            faceServiceBound = false
-            backgroundFaceService = null
-        }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        Intent(this, BackgroundFaceService::class.java).also { intent ->
-            bindService(intent, faceServiceConnection, Context.BIND_AUTO_CREATE)
-            startService(intent)
-        }
-    }
-
-    override fun onStop() {
-        super.onStop()
-        if (faceServiceBound) {
-            unbindService(faceServiceConnection)
-            faceServiceBound = false
+        // Observe matched face
+        lifecycleScope.launchWhenStarted {
+            faceViewModel.matchedFace.collect { faceMatch ->
+                Toast.makeText(this@MainActivity, "Matched: ${faceMatch.name}", Toast.LENGTH_SHORT).show()
+                binding.responseTextView.text = faceMatch.response
+                chatViewModel.speakOut(faceMatch.response, selectedLanguageCode)
+            }
         }
     }
 
     override fun onResume() {
         super.onResume()
         binding.backgroundVideo.start()
+        faceViewModel.reloadRegisteredFaces()
     }
 
     override fun onPause() {
